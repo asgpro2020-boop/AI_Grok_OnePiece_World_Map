@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ONE PIECE WORLD — 3D Globe Atlas</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading">
+    <div class="load-inner">
+      <div class="load-title">ONE PIECE</div>
+      <div class="load-sub">WORLD ATLAS</div>
+      <div class="load-status" id="load-status">Initializing Blue Planet...</div>
+      <div class="progress-track"><div class="progress-fill" id="progress"></div></div>
+    </div>
+  </div>
+
+  <!-- 3D Canvas -->
+  <div id="canvas-wrap"></div>
+
+  <!-- Top Bar -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-main">ONE PIECE</span>
+      <span class="brand-sub">WORLD ATLAS</span>
+    </div>
+
+    <div class="search-box">
+      <svg class="search-ico" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input id="search" type="text" placeholder="Search island, kingdom, region..." autocomplete="off" />
+      <div id="search-dropdown"></div>
+    </div>
+
+    <div class="top-actions">
+      <button class="tb-btn" id="btn-night" title="Day / Night">◐</button>
+      <button class="tb-btn" id="btn-reset" title="Reset View">⌂</button>
+    </div>
+  </header>
+
+  <!-- Left Panel - Layers -->
+  <aside id="sidebar">
+    <div class="side-section">
+      <div class="side-title">LAYERS</div>
+      <label class="ly"><input type="checkbox" id="ly-redline" checked><span>Red Line</span></label>
+      <label class="ly"><input type="checkbox" id="ly-grandline" checked><span>Grand Line</span></label>
+      <label class="ly"><input type="checkbox" id="ly-calmbelt" checked><span>Calm Belts</span></label>
+      <label class="ly"><input type="checkbox" id="ly-islands" checked><span>Islands</span></label>
+      <label class="ly"><input type="checkbox" id="ly-labels" checked><span>Labels</span></label>
+      <label class="ly"><input type="checkbox" id="ly-routes"><span>Voyage Routes</span></label>
+      <label class="ly"><input type="checkbox" id="ly-atmosphere" checked><span>Atmosphere</span></label>
+      <label class="ly"><input type="checkbox" id="ly-clouds" checked><span>Clouds</span></label>
+    </div>
+
+    <div class="side-section">
+      <div class="side-title">SPOILER LEVEL</div>
+      <select id="spoiler">
+        <option value="0">East Blue only</option>
+        <option value="1">Paradise (Grand Line)</option>
+        <option value="2" selected>New World</option>
+        <option value="3">Full (no spoilers hidden)</option>
+      </select>
+    </div>
+
+    <div class="side-section">
+      <div class="side-title">CAMERA PRESETS</div>
+      <div class="preset-grid">
+        <button data-view="home">Home</button>
+        <button data-view="north">North</button>
+        <button data-view="south">South</button>
+        <button data-view="east">East Blue</button>
+        <button data-view="west">West Blue</button>
+        <button data-view="grand">Grand Line</button>
+        <button data-view="newworld">New World</button>
+        <button data-view="redline">Red Line</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Info Panel -->
+  <aside id="infopanel" class="hidden">
+    <button id="info-close">×</button>
+    <div class="info-name" id="info-name"></div>
+    <div class="info-region" id="info-region"></div>
+    <div class="info-meta">
+      <div><span>Type</span><b id="info-type"></b></div>
+      <div><span>Climate</span><b id="info-climate"></b></div>
+      <div><span>Arc</span><b id="info-arc"></b></div>
+      <div><span>Accuracy</span><b id="info-acc"></b></div>
+    </div>
+    <p class="info-desc" id="info-desc"></p>
+    <div class="info-actions">
+      <button id="btn-flyto">Fly to</button>
+      <button id="btn-showroute">Show Route</button>
+    </div>
+  </aside>
+
+  <!-- Bottom HUD -->
+  <footer id="hud">
+    <div class="hud-item">Lat <span id="hud-lat">0.0</span>°</div>
+    <div class="hud-item">Lon <span id="hud-lon">0.0</span>°</div>
+    <div class="hud-item">Altitude <span id="hud-alt">—</span></div>
+    <div class="hud-item">Region <span id="hud-region">Blue Planet</span></div>
+  </footer>
+
+  <!-- Legend -->
+  <div id="legend">
+    <div><i class="lg-red"></i> Red Line</div>
+    <div><i class="lg-grand"></i> Grand Line</div>
+    <div><i class="lg-calm"></i> Calm Belt</div>
+    <div><i class="lg-island"></i> Island</div>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Scripts -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
