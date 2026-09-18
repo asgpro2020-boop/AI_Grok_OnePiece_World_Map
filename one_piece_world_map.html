@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ONE PIECE WORLD ATLAS — Interactive 3D Globe</title>
+<style>
+  :root {
+    --bg-deep: #07111A;
+    --bg-panel: #10202A;
+    --bg-panel-2: #18323C;
+    --gold: #D8B56A;
+    --cream: #E8E2D0;
+    --accent: #4ecdc4;
+    --danger: #e74c3c;
+    --text: #E8E2D0;
+    --muted: #8a9ba8;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--bg-deep); font-family: 'Segoe UI', system-ui, sans-serif; color:var(--text); }
+  #canvas-container { position:absolute; inset:0; }
+  canvas { display:block; }
+
+  /* Loading */
+  #loading {
+    position:fixed; inset:0; background:var(--bg-deep); z-index:9999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition: opacity 0.8s ease;
+  }
+  #loading.hide { opacity:0; pointer-events:none; }
+  .load-title { font-size:1.8rem; letter-spacing:0.3em; color:var(--gold); margin-bottom:1.5rem; }
+  .load-status { color:var(--muted); font-size:0.9rem; margin-bottom:1rem; min-height:1.2em; }
+  .progress-bar { width:280px; height:4px; background:#1a2a35; border-radius:2px; overflow:hidden; }
+  .progress-fill { height:100%; width:0%; background:linear-gradient(90deg,var(--gold),var(--accent)); transition:width 0.3s; }
+
+  /* Top Bar */
+  #top-bar {
+    position:absolute; top:0; left:0; right:0; height:56px;
+    background:linear-gradient(180deg, rgba(7,17,26,0.95), rgba(7,17,26,0.7));
+    backdrop-filter:blur(12px); border-bottom:1px solid rgba(216,181,106,0.15);
+    display:flex; align-items:center; padding:0 16px; gap:16px; z-index:100;
+  }
+  .logo { font-weight:700; letter-spacing:0.15em; color:var(--gold); font-size:1.05rem; white-space:nowrap; }
+  .search-wrap { flex:1; max-width:420px; position:relative; }
+  #search-input {
+    width:100%; padding:8px 14px 8px 36px; background:rgba(16,32,42,0.8);
+    border:1px solid rgba(216,181,106,0.25); border-radius:8px; color:var(--cream);
+    font-size:0.9rem; outline:none;
+  }
+  #search-input:focus { border-color:var(--gold); }
+  .search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  #search-results {
+    position:absolute; top:100%; left:0; right:0; margin-top:4px;
+    background:var(--bg-panel); border:1px solid rgba(216,181,106,0.2);
+    border-radius:8px; max-height:280px; overflow-y:auto; display:none; z-index:200;
+  }
+  .search-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.04); }
+  .search-item:hover { background:rgba(216,181,106,0.12); }
+  .search-item .name { color:var(--cream); font-weight:500; }
+  .search-item .meta { font-size:0.75rem; color:var(--muted); }
+
+  .mode-btns { display:flex; gap:6px; }
+  .mode-btn {
+    padding:6px 12px; background:transparent; border:1px solid rgba(216,181,106,0.3);
+    color:var(--muted); border-radius:6px; cursor:pointer; font-size:0.8rem; transition:all 0.2s;
+  }
+  .mode-btn:hover, .mode-btn.active { background:rgba(216,181,106,0.15); color:var(--gold); border-color:var(--gold); }
+
+  /* Left Panel */
+  #left-panel {
+    position:absolute; top:70px; left:16px; width:240px;
+    background:rgba(16,32,42,0.92); backdrop-filter:blur(16px);
+    border:1px solid rgba(216,181,106,0.18); border-radius:12px;
+    padding:16px; z-index:90; max-height:calc(100vh - 140px); overflow-y:auto;
+  }
+  .panel-title { font-size:0.75rem; letter-spacing:0.2em; color:var(--gold); margin-bottom:12px; }
+  .layer-item { display:flex; align-items:center; gap:10px; padding:6px 0; cursor:pointer; font-size:0.88rem; }
+  .layer-item input { accent-color:var(--gold); }
+  .section { margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); }
+  select, .spoiler-select {
+    width:100%; padding:7px 10px; background:var(--bg-panel-2); border:1px solid rgba(216,181,106,0.2);
+    color:var(--cream); border-radius:6px; font-size:0.85rem; margin-top:6px;
+  }
+
+  /* Right Info Panel */
+  #info-panel {
+    position:absolute; top:70px; right:16px; width:300px;
+    background:rgba(16,32,42,0.94); backdrop-filter:blur(16px);
+    border:1px solid rgba(216,181,106,0.2); border-radius:12px;
+    padding:20px; z-index:90; display:none; max-height:calc(100vh - 140px); overflow-y:auto;
+  }
+  #info-panel.visible { display:block; }
+  .info-name { font-size:1.3rem; color:var(--gold); margin-bottom:4px; letter-spacing:0.05em; }
+  .info-region { font-size:0.85rem; color:var(--accent); margin-bottom:12px; }
+  .info-row { display:flex; justify-content:space-between; padding:5px 0; font-size:0.85rem; border-bottom:1px solid rgba(255,255,255,0.04); }
+  .info-label { color:var(--muted); }
+  .info-desc { margin-top:14px; font-size:0.88rem; line-height:1.5; color:var(--cream); opacity:0.9; }
+  .info-actions { margin-top:16px; display:flex; gap:8px; }
+  .btn {
+    padding:8px 14px; border-radius:6px; border:none; cursor:pointer; font-size:0.82rem;
+    background:rgba(216,181,106,0.2); color:var(--gold); border:1px solid rgba(216,181,106,0.4);
+  }
+  .btn:hover { background:rgba(216,181,106,0.35); }
+  .close-btn { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--muted); font-size:1.2rem; cursor:pointer; }
+
+  /* Bottom Bar */
+  #bottom-bar {
+    position:absolute; bottom:0; left:0; right:0; height:42px;
+    background:linear-gradient(0deg, rgba(7,17,26,0.95), rgba(7,17,26,0.6));
+    backdrop-filter:blur(10px); border-top:1px solid rgba(216,181,106,0.12);
+    display:flex; align-items:center; padding:0 20px; gap:24px; font-size:0.8rem; color:var(--muted); z-index:100;
+  }
+  .coord span { color:var(--cream); }
+
+  /* Legend */
+  #legend {
+    position:absolute; bottom:52px; left:16px;
+    background:rgba(16,32,42,0.9); border:1px solid rgba(216,181,106,0.15);
+    border-radius:8px; padding:10px 14px; font-size:0.75rem; z-index:80;
+  }
+  .leg-item { display:flex; align-items:center; gap:8px; margin:4px 0; }
+  .leg-line { width:24px; height:3px; border-radius:2px; }
+  .leg-dot { width:8px; height:8px; border-radius:50%; }
+
+  /* Camera presets */
+  #presets {
+    position:absolute; bottom:52px; right:16px; display:flex; flex-wrap:wrap; gap:6px; max-width:320px; justify-content:flex-end; z-index:80;
+  }
+  .preset-btn {
+    padding:5px 10px; background:rgba(16,32,42,0.85); border:1px solid rgba(216,181,106,0.25);
+    color:var(--muted); border-radius:5px; font-size:0.72rem; cursor:pointer;
+  }
+  .preset-btn:hover { color:var(--gold); border-color:var(--gold); }
+
+  /* Tooltip */
+  #tooltip {
+    position:absolute; pointer-events:none; background:rgba(7,17,26,0.92);
+    border:1px solid rgba(216,181,106,0.3); border-radius:6px; padding:8px 12px;
+    font-size:0.82rem; z-index:150; display:none; max-width:220px;
+  }
+
+  @media (max-width:900px) {
+    #left-panel { width:200px; font-size:0.85rem; }
+    #info-panel { width:260px; }
+  }
+</style>
+</head>
+<body>
+  <div id="loading">
+    <div class="load-title">ONE PIECE WORLD</div>
+    <div class="load-status" id="load-status">Initializing Blue Planet...</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div id="top-bar">
+    <div class="logo">ONE PIECE WORLD ATLAS</div>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="search-input" type="text" placeholder="Search location (Wano, Egghead, Alabasta...)">
+      <div id="search-results"></div>
+    </div>
+    <div class="mode-btns">
+      <button class="mode-btn active" data-mode="globe">Globe</button>
+      <button class="mode-btn" data-mode="navigation">Navigation</button>
+      <button class="mode-btn" data-mode="geography">Geography</button>
+      <button class="mode-btn" data-mode="night">Night</button>
+    </div>
+  </div>
+
+  <div id="left-panel">
+    <div class="panel-title">LAYERS</div>
+    <label class="layer-item"><input type="checkbox" id="ly-redline" checked> Red Line</label>
+    <label class="layer-item"><input type="checkbox" id="ly-grandline" checked> Grand Line</label>
+    <label class="layer-item"><input type="checkbox" id="ly-calmbelt" checked> Calm Belt</label>
+    <label class="layer-item"><input type="checkbox" id="ly-blues" checked> Four Blues</label>
+    <label class="layer-item"><input type="checkbox" id="ly-islands" checked> Islands</label>
+    <label class="layer-item"><input type="checkbox" id="ly-routes"> Routes</label>
+    <label class="layer-item"><input type="checkbox" id="ly-strawhat"> Straw Hat Journey</label>
+    <label class="layer-item"><input type="checkbox" id="ly-labels" checked> Labels</label>
+    <label class="layer-item"><input type="checkbox" id="ly-atmosphere" checked> Atmosphere</label>
+
+    <div class="section">
+      <div class="panel-title">SPOILER LEVEL</div>
+      <select id="spoiler-level" class="spoiler-select">
+        <option value="0">No Spoilers (East Blue only)</option>
+        <option value="1">Grand Line (Paradise)</option>
+        <option value="2" selected>New World</option>
+        <option value="3">Everything</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <div class="panel-title">ARC FILTER</div>
+      <select id="arc-filter" class="spoiler-select">
+        <option value="all">All Arcs</option>
+        <option value="East Blue">East Blue Saga</option>
+        <option value="Alabasta">Alabasta</option>
+        <option value="Skypiea">Skypiea</option>
+        <option value="Water 7">Water 7</option>
+        <option value="Thriller Bark">Thriller Bark</option>
+        <option value="Summit War">Summit War</option>
+        <option value="Fish-Man Island">Fish-Man Island</option>
+        <option value="Dressrosa">Dressrosa</option>
+        <option value="Whole Cake Island">Whole Cake Island</option>
+        <option value="Wano">Wano</option>
+        <option value="Egghead">Egghead</option>
+        <option value="Elbaf">Elbaf</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="info-panel">
+    <button class="close-btn" id="close-info">×</button>
+    <div class="info-name" id="info-name">—</div>
+    <div class="info-region" id="info-region">—</div>
+    <div class="info-row"><span class="info-label">Type</span><span id="info-type">—</span></div>
+    <div class="info-row"><span class="info-label">Climate</span><span id="info-climate">—</span></div>
+    <div class="info-row"><span class="info-label">Arc</span><span id="info-arc">—</span></div>
+    <div class="info-row"><span class="info-label">Accuracy</span><span id="info-accuracy">—</span></div>
+    <div class="info-desc" id="info-desc"></div>
+    <div class="info-actions">
+      <button class="btn" id="btn-fly">Navigate</button>
+      <button class="btn" id="btn-route">Show Route</button>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="leg-item"><div class="leg-line" style="background:#c0392b"></div> Red Line</div>
+    <div class="leg-item"><div class="leg-line" style="background:#00d2d3"></div> Grand Line</div>
+    <div class="leg-item"><div class="leg-line" style="background:#74b9ff"></div> Calm Belt</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#f1c40f"></div> Island</div>
+  </div>
+
+  <div id="presets">
+    <button class="preset-btn" data-view="home">HOME</button>
+    <button class="preset-btn" data-view="north">NORTH</button>
+    <button class="preset-btn" data-view="south">SOUTH</button>
+    <button class="preset-btn" data-view="east">EAST BLUE</button>
+    <button class="preset-btn" data-view="west">WEST BLUE</button>
+    <button class="preset-btn" data-view="grandline">GRAND LINE</button>
+    <button class="preset-btn" data-view="newworld">NEW WORLD</button>
+    <button class="preset-btn" data-view="redline">RED LINE</button>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="coord">Lat <span id="lat">0.00</span>°</div>
+    <div class="coord">Lon <span id="lon">0.00</span>°</div>
+    <div class="coord">Region <span id="region-hover">—</span></div>
+    <div class="coord">Scale ~ <span id="scale">Planet</span></div>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    // ===================== DATA =====================
+    const PLANET_RADIUS = 100;
+
+    const ISLANDS = [
+      // East Blue
+      { id:'foosha', name:'Foosha Village', region:'East Blue', type:'Village', climate:'Temperate', arc:'Romance Dawn', spoiler:0, lat:12, lon:85, accuracy:'approximate', desc:'Hometown of Monkey D. Luffy. A quiet village at the edge of the East Blue.', importance:'high' },
+      { id:'goa', name:'Goa Kingdom', region:'East Blue', type:'Kingdom', climate:'Temperate', arc:'Romance Dawn', spoiler:0, lat:18, lon:78, accuracy:'approximate', desc:'Kingdom where Luffy and Ace grew up. Home of the Windmill Village and Gray Terminal.', importance:'high' },
+      { id:'shells', name:'Shells Town', region:'East Blue', type:'Town', climate:'Temperate', arc:'Romance Dawn', spoiler:0, lat:8, lon:95, accuracy:'approximate', desc:'Marine base where Zoro was held captive. Captain Morgan ruled here.', importance:'medium' },
+      { id:'orange', name:'Orange Town', region:'East Blue', type:'Town', climate:'Temperate', arc:'Orange Town', spoiler:0, lat:5, lon:105, accuracy:'approximate', desc:'Town attacked by Buggy the Clown. Where Nami first joined the crew temporarily.', importance:'medium' },
+      { id:'syrup', name:'Syrup Village', region:'East Blue', type:'Village', climate:'Temperate', arc:'Syrup Village', spoiler:0, lat:-2, lon:112, accuracy:'approximate', desc:'Hometown of Usopp. Home of the three fake pirate crew and Kaya.', importance:'high' },
+      { id:'baratie', name:'Baratie', region:'East Blue', type:'Restaurant Ship', climate:'Oceanic', arc:'Baratie', spoiler:0, lat:-8, lon:118, accuracy:'approximate', desc:'Floating restaurant owned by Zeff. Where Sanji worked and joined the Straw Hats.', importance:'high' },
+      { id:'cocoyasi', name:'Cocoyasi Village', region:'East Blue', type:'Village', climate:'Tropical', arc:'Arlong Park', spoiler:0, lat:-15, lon:125, accuracy:'approximate', desc:'Nami\'s hometown. Occupied by Arlong\'s fish-man crew.', importance:'high' },
+      { id:'arlong', name:'Arlong Park', region:'East Blue', type:'Pirate Base', climate:'Tropical', arc:'Arlong Park', spoiler:0, lat:-16, lon:128, accuracy:'approximate', desc:'Base of Arlong. Destroyed by Luffy.', importance:'high' },
+      { id:'loguetown', name:'Loguetown', region:'East Blue', type:'Town', climate:'Temperate', arc:'Loguetown', spoiler:0, lat:0, lon:140, accuracy:'approximate', desc:'Town of the beginning and the end. Birthplace and execution site of Gol D. Roger.', importance:'high' },
+
+      // Paradise
+      { id:'reverse', name:'Reverse Mountain', region:'Grand Line', type:'Mountain', climate:'Extreme', arc:'Reverse Mountain', spoiler:1, lat:0, lon:0, accuracy:'confirmed', desc:'The entrance to the Grand Line. Four rivers from the Blues flow upward into the mountain.', importance:'critical', altitude:0.08 },
+      { id:'twin', name:'Twin Cape', region:'Grand Line', type:'Cape', climate:'Temperate', arc:'Reverse Mountain', spoiler:1, lat:2, lon:5, accuracy:'confirmed', desc:'Where Laboon waits for the Rumbar Pirates. Home of Crocus.', importance:'high' },
+      { id:'whiskey', name:'Whiskey Peak', region:'Grand Line', type:'Island', climate:'Desert', arc:'Whiskey Peak', spoiler:1, lat:5, lon:18, accuracy:'approximate', desc:'First island of the Grand Line. Home of the Baroque Works agents.', importance:'medium' },
+      { id:'little', name:'Little Garden', region:'Grand Line', type:'Island', climate:'Prehistoric', arc:'Little Garden', spoiler:1, lat:8, lon:32, accuracy:'approximate', desc:'Island of giants Dorry and Brogy. Home to dinosaurs and ancient beasts.', importance:'medium' },
+      { id:'drum', name:'Drum Island', region:'Grand Line', type:'Island', climate:'Winter', arc:'Drum Island', spoiler:1, lat:22, lon:45, accuracy:'approximate', desc:'Snowy island and former kingdom of Wapol. Hometown of Tony Tony Chopper.', importance:'high' },
+      { id:'alabasta', name:'Alabasta', region:'Grand Line', type:'Kingdom', climate:'Desert', arc:'Alabasta', spoiler:1, lat:-5, lon:58, accuracy:'confirmed', desc:'Desert kingdom ruled by the Nefertari family. Capital is Alubarna.', importance:'critical' },
+      { id:'jaya', name:'Jaya', region:'Grand Line', type:'Island', climate:'Tropical', arc:'Jaya', spoiler:1, lat:12, lon:72, accuracy:'approximate', desc:'Sky island related island. Home of Mock Town and the Knock Up Stream.', importance:'high' },
+      { id:'skypiea', name:'Skypiea', region:'Sky', type:'Sky Island', climate:'Sky', arc:'Skypiea', spoiler:1, lat:15, lon:75, accuracy:'approximate', desc:'Island in the sky. Home of the Shandia and the city of gold.', importance:'critical', altitude:0.22 },
+      { id:'longring', name:'Long Ring Long Land', region:'Grand Line', type:'Island', climate:'Temperate', arc:'Long Ring Long Land', spoiler:1, lat:-12, lon:88, accuracy:'approximate', desc:'Strange elongated island where the Davy Back Fight took place.', importance:'medium' },
+      { id:'water7', name:'Water 7', region:'Grand Line', type:'City', climate:'Oceanic', arc:'Water 7', spoiler:1, lat:-3, lon:105, accuracy:'confirmed', desc:'City of shipwrights and waterways. Home of the Galley-La Company and Franky.', importance:'critical' },
+      { id:'enies', name:'Enies Lobby', region:'Grand Line', type:'Judicial Island', climate:'Temperate', arc:'Enies Lobby', spoiler:1, lat:5, lon:115, accuracy:'confirmed', desc:'Judicial island of the World Government. Connected to Water 7 by the Sea Train.', importance:'critical' },
+      { id:'thriller', name:'Thriller Bark', region:'Grand Line', type:'Ghost Ship Island', climate:'Foggy', arc:'Thriller Bark', spoiler:1, lat:-18, lon:130, accuracy:'approximate', desc:'Massive ghost ship commanded by Gecko Moria. Where Brook joined the crew.', importance:'high' },
+      { id:'sabaody', name:'Sabaody Archipelago', region:'Grand Line', type:'Archipelago', climate:'Temperate', arc:'Sabaody', spoiler:1, lat:8, lon:155, accuracy:'confirmed', desc:'Archipelago of mangrove trees near the Red Line. Gateway to the New World.', importance:'critical' },
+      { id:'amazon', name:'Amazon Lily', region:'Calm Belt', type:'Island', climate:'Tropical', arc:'Amazon Lily', spoiler:1, lat:25, lon:170, accuracy:'approximate', desc:'Island of the Kuja tribe. Ruled by Boa Hancock. No men allowed.', importance:'high' },
+      { id:'impel', name:'Impel Down', region:'Calm Belt', type:'Prison', climate:'Various', arc:'Impel Down', spoiler:1, lat:-20, lon:175, accuracy:'confirmed', desc:'Underwater prison of the World Government. Six levels of hell.', importance:'critical', altitude:-0.12 },
+      { id:'marineford', name:'Marineford', region:'Grand Line', type:'Marine HQ', climate:'Temperate', arc:'Marineford', spoiler:1, lat:0, lon:180, accuracy:'confirmed', desc:'Former headquarters of the Marines. Site of the Summit War.', importance:'critical' },
+      { id:'fishman', name:'Fish-Man Island', region:'Underwater', type:'Kingdom', climate:'Underwater', arc:'Fish-Man Island', spoiler:1, lat:0, lon:0, accuracy:'confirmed', desc:'Kingdom under the Red Line. Home of the fish-men and mermaids. Ruled by Neptune.', importance:'critical', altitude:-0.18 },
+
+      // New World
+      { id:'punk', name:'Punk Hazard', region:'New World', type:'Island', climate:'Volcanic / Ice', arc:'Punk Hazard', spoiler:2, lat:15, lon:-160, accuracy:'approximate', desc:'Island split into fire and ice. Former laboratory of Caesar Clown and Vegapunk.', importance:'high' },
+      { id:'dressrosa', name:'Dressrosa', region:'New World', type:'Kingdom', climate:'Mediterranean', arc:'Dressrosa', spoiler:2, lat:-8, lon:-140, accuracy:'confirmed', desc:'Kingdom once ruled by Donquixote Doflamingo. Home of the Tontatta and the Colosseum.', importance:'critical' },
+      { id:'zou', name:'Zou', region:'New World', type:'Moving Island', climate:'Forest', arc:'Zou', spoiler:2, lat:20, lon:-120, accuracy:'approximate', desc:'Island on the back of the giant elephant Zunesha. Home of the Mink Tribe.', importance:'critical' },
+      { id:'wholecake', name:'Whole Cake Island', region:'New World', type:'Island', climate:'Sweet', arc:'Whole Cake Island', spoiler:2, lat:-15, lon:-100, accuracy:'approximate', desc:'Territory of Big Mom. Made of sweets and ruled by the Charlotte family.', importance:'critical' },
+      { id:'wano', name:'Wano Country', region:'New World', type:'Country', climate:'Seasonal', arc:'Wano', spoiler:2, lat:10, lon:-70, accuracy:'confirmed', desc:'Isolated country of samurai. Home of the Kozuki family and the land of Onigashima.', importance:'critical' },
+      { id:'onigashima', name:'Onigashima', region:'New World', type:'Island', climate:'Volcanic', arc:'Wano', spoiler:2, lat:12, lon:-68, accuracy:'confirmed', desc:'Skull-shaped island base of Kaido. Site of the final battle in Wano.', importance:'critical' },
+      { id:'egghead', name:'Egghead', region:'New World', type:'Future Island', climate:'Artificial', arc:'Egghead', spoiler:2, lat:-5, lon:-40, accuracy:'confirmed', desc:'Island of the future. Laboratory of Dr. Vegapunk. Highly advanced technology.', importance:'critical' },
+      { id:'elbaf', name:'Elbaf', region:'New World', type:'Kingdom', climate:'Northern', arc:'Elbaf', spoiler:2, lat:30, lon:-20, accuracy:'approximate', desc:'Kingdom of the giants. One of the strongest nations in the New World.', importance:'critical' },
+
+      // Red Line
+      { id:'mary', name:'Mary Geoise', region:'Red Line', type:'Holy Land', climate:'High Altitude', arc:'Various', spoiler:1, lat:0, lon:0, accuracy:'confirmed', desc:'Holy Land of the Celestial Dragons. Capital of the World Government atop the Red Line.', importance:'critical', altitude:0.25 },
+      { id:'redport', name:'Red Port', region:'Red Line', type:'Port', climate:'Temperate', arc:'Various', spoiler:1, lat:2, lon:5, accuracy:'confirmed', desc:'Port at the base of the Red Line used to ascend to Mary Geoise via the Bondolas.', importance:'high' }
+    ];
+
+    // Simple route data (Paradise path)
+    const ROUTES = [
+      ['reverse','twin','whiskey','little','drum','alabasta','jaya','skypiea','longring','water7','enies','thriller','sabaody','fishman'],
+      ['punk','dressrosa','zou','wholecake','wano','egghead','elbaf']
+    ];
+
+    // ===================== STATE =====================
+    let scene, camera, renderer, labelRenderer, controls;
+    let planet, ocean, atmosphere, redLine, grandLine, calmBelts = [];
+    let islandGroup, routeGroup, labelGroup;
+    let raycaster = new THREE.Raycaster();
+    let mouse = new THREE.Vector2();
+    let selectedIsland = null;
+    let autoRotate = true;
+    let currentMode = 'globe';
+    let spoilerLevel = 2;
+    let arcFilter = 'all';
+
+    const clock = new THREE.Clock();
+
+    // ===================== UTILS =====================
+    function latLonToVector3(lat, lon, radius = PLANET_RADIUS) {
+      const phi = (90 - lat) * Math.PI / 180;
+      const theta = (lon + 180) * Math.PI / 180;
+      return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+         radius * Math.cos(phi),
+         radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    function setProgress(p, text) {
+      document.getElementById('progress').style.width = p + '%';
+      if (text) document.getElementById('load-status').textContent = text;
+    }
+
+    // ===================== INIT =====================
+    async function init() {
+      setProgress(5, 'Creating scene...');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x02040a);
+      scene.fog = new THREE.FogExp2(0x02040a, 0.0012);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+      camera.position.set(0, 80, 280);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1;
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(window.innerWidth, window.innerHeight);
+      labelRenderer.domElement.style.position = 'absolute';
+      labelRenderer.domElement.style.top = '0';
+      labelRenderer.domElement.style.pointerEvents = 'none';
+      document.getElementById('canvas-container').appendChild(labelRenderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.minDistance = PLANET_RADIUS * 1.15;
+      controls.maxDistance = PLANET_RADIUS * 4.5;
+      controls.enablePan = true;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.35;
+      controls.addEventListener('start', () => { autoRotate = false; controls.autoRotate = false; });
+
+      // Lights
+      const ambient = new THREE.AmbientLight(0x223344, 0.35);
+      scene.add(ambient);
+      const hemi = new THREE.HemisphereLight(0x88aacc, 0x112233, 0.4);
+      scene.add(hemi);
+      const sun = new THREE.DirectionalLight(0xfff5e0, 1.4);
+      sun.position.set(300, 150, 200);
+      sun.castShadow = false;
+      scene.add(sun);
+      const fill = new THREE.DirectionalLight(0x4466aa, 0.25);
+      fill.position.set(-200, -50, -150);
+      scene.add(fill);
+
+      setProgress(15, 'Generating starfield...');
+      createStarfield();
+
+      setProgress(25, 'Building Blue Planet...');
+      createPlanet();
+
+      setProgress(40, 'Creating Ocean...');
+      createOcean();
+
+      setProgress(50, 'Raising Red Line...');
+      createRedLine();
+
+      setProgress(60, 'Drawing Grand Line & Calm Belts...');
+      createGrandLine();
+      createCalmBelts();
+
+      setProgress(70, 'Placing islands...');
+      createIslands();
+
+      setProgress(80, 'Building atmosphere...');
+      createAtmosphere();
+
+      setProgress(88, 'Creating routes...');
+      createRoutes();
+
+      setProgress(95, 'Finalizing UI...');
+      setupUI();
+      setupEvents();
+
+      setProgress(100, 'Ready');
+      setTimeout(() => {
+        document.getElementById('loading').classList.add('hide');
+        animate();
+      }, 600);
+
+      window.addEventListener('resize', onResize);
+    }
+
+    function createStarfield() {
+      const geo = new THREE.BufferGeometry();
+      const count = 12000;
+      const pos = new Float32Array(count * 3);
+      const sizes = new Float32Array(count);
+      for (let i = 0; i < count; i++) {
+        const r = 800 + Math.random() * 600;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        pos[i*3] = r * Math.sin(phi) * Math.cos(theta);
+        pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+        pos[i*3+2] = r * Math.cos(phi);
+        sizes[i] = Math.random() * 1.8 + 0.3;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+      const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, sizeAttenuation: true, transparent: true, opacity: 0.85 });
+      scene.add(new THREE.Points(geo, mat));
+    }
+
+    function createPlanet() {
+      const geo = new THREE.SphereGeometry(PLANET_RADIUS * 0.998, 96, 64);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x1a3a4a,
+        roughness: 0.9,
+        metalness: 0.05,
+        flatShading: false
+      });
+      planet = new THREE.Mesh(geo, mat);
+      scene.add(planet);
+    }
+
+    function createOcean() {
+      const geo = new THREE.SphereGeometry(PLANET_RADIUS, 128, 96);
+      const mat = new THREE.MeshPhysicalMaterial({
+        color: 0x0a2a4a,
+        roughness: 0.15,
+        metalness: 0.1,
+        transmission: 0.15,
+        thickness: 2,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.FrontSide
+      });
+      ocean = new THREE.Mesh(geo, mat);
+      scene.add(ocean);
+
+      const deepGeo = new THREE.SphereGeometry(PLANET_RADIUS * 0.995, 64, 48);
+      const deepMat = new THREE.MeshStandardMaterial({ color: 0x051525, roughness: 0.95, metalness: 0.05 });
+      scene.add(new THREE.Mesh(deepGeo, deepMat));
+    }
+
+    function createRedLine() {
+      const group = new THREE.Group();
+      const segments = 180;
+      const tubeSegments = 24;
+
+      const points = [];
+      for (let i = 0; i <= segments; i++) {
+        const t = (i / segments) * Math.PI * 2;
+        const r = PLANET_RADIUS * 1.01;
+        const x = r * Math.sin(t) * 0.15;
+        const y = r * Math.cos(t);
+        const z = r * Math.sin(t);
+        points.push(new THREE.Vector3(x, y, z));
+      }
+
+      const curve = new THREE.CatmullRomCurve3(points, true);
+      const tubeGeo = new THREE.TubeGeometry(curve, segments, 6.5, tubeSegments, true);
+
+      const pos = tubeGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+        const noise = (Math.sin(vx*0.08) * Math.cos(vy*0.07) + Math.sin(vz*0.09)) * 1.8;
+        const len = Math.sqrt(vx*vx + vy*vy + vz*vz);
+        const scale = 1 + noise / len * 0.6;
+        pos.setXYZ(i, vx * scale, vy * scale, vz * scale);
+      }
+      pos.needsUpdate = true;
+      tubeGeo.computeVertexNormals();
+
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x6b2c1a,
+        roughness: 0.92,
+        metalness: 0.08,
+        flatShading: true
+      });
+      const mesh = new THREE.Mesh(tubeGeo, mat);
+      group.add(mesh);
+
+      const tubeGeo2 = new THREE.TubeGeometry(curve, segments, 5.2, 16, true);
+      const mat2 = new THREE.MeshStandardMaterial({ color: 0x3d1a0f, roughness: 0.95, flatShading: true });
+      group.add(new THREE.Mesh(tubeGeo2, mat2));
+
+      redLine = group;
+      scene.add(redLine);
+    }
+
+    function createGrandLine() {
+      const group = new THREE.Group();
+      const geo = new THREE.TorusGeometry(PLANET_RADIUS * 1.002, 2.8, 16, 180);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x00d2d3,
+        transparent: true,
+        opacity: 0.55,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = Math.PI / 2;
+      group.add(mesh);
+
+      const geo2 = new THREE.TorusGeometry(PLANET_RADIUS * 1.002, 1.4, 12, 120);
+      const mat2 = new THREE.MeshBasicMaterial({ color: 0xa0ffff, transparent: true, opacity: 0.25 });
+      const mesh2 = new THREE.Mesh(geo2, mat2);
+      mesh2.rotation.x = Math.PI / 2;
+      group.add(mesh2);
+
+      grandLine = group;
+      scene.add(grandLine);
+    }
+
+    function createCalmBelts() {
+      const offsets = [12, -12];
+      offsets.forEach(offset => {
+        const group = new THREE.Group();
+        const r = PLANET_RADIUS * 1.0015;
+        const geo = new THREE.TorusGeometry(r, 1.6, 10, 120);
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x74b9ff,
+          transparent: true,
+          opacity: 0.35
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.x = Math.PI / 2;
+        mesh.position.y = Math.sin(offset * Math.PI / 180) * PLANET_RADIUS * 0.15;
+        group.add(mesh);
+        calmBelts.push(group);
+        scene.add(group);
+      });
+    }
+
+    function createAtmosphere() {
+      const geo = new THREE.SphereGeometry(PLANET_RADIUS * 1.045, 64, 48);
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vPosition;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormal;
+          varying vec3 vPosition;
+          void main() {
+            float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.2);
+            vec3 atmosphere = vec3(0.25, 0.55, 0.95) * intensity;
+            gl_FragColor = vec4(atmosphere, intensity * 0.85);
+          }
+        `,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false
+      });
+      atmosphere = new THREE.Mesh(geo, mat);
+      scene.add(atmosphere);
+    }
+
+    function createIslands() {
+      islandGroup = new THREE.Group();
+      labelGroup = new THREE.Group();
+
+      ISLANDS.forEach(island => {
+        const alt = island.altitude || 0;
+        const radius = PLANET_RADIUS * (1 + alt);
+        const pos = latLonToVector3(island.lat, island.lon, radius);
+
+        const size = island.importance === 'critical' ? 1.8 : island.importance === 'high' ? 1.3 : 0.9;
+        const geo = new THREE.SphereGeometry(size, 12, 10);
+        let color = 0xf1c40f;
+        if (island.region === 'Red Line') color = 0xe74c3c;
+        else if (island.region === 'Sky') color = 0xa29bfe;
+        else if (island.region === 'Underwater' || island.altitude < 0) color = 0x00cec9;
+        else if (island.region === 'New World') color = 0xe17055;
+
+        const mat = new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.35,
+          roughness: 0.4
+        });
+        const marker = new THREE.Mesh(geo, mat);
+        marker.position.copy(pos);
+        marker.userData = island;
+        marker.name = island.id;
+        islandGroup.add(marker);
+
+        const div = document.createElement('div');
+        div.className = 'island-label';
+        div.textContent = island.name;
+        div.style.cssText = `
+          color: #E8E2D0; font-size: 11px; font-weight: 500;
+          text-shadow: 0 0 6px #000, 0 1px 3px #000;
+          white-space: nowrap; pointer-events: none;
+          opacity: 0.9; transition: opacity 0.3s;
+        `;
+        const label = new CSS2DObject(div);
+        label.position.copy(pos);
+        label.userData = island;
+        labelGroup.add(label);
+      });
+
+      scene.add(islandGroup);
+      scene.add(labelGroup);
+    }
+
+    function createRoutes() {
+      routeGroup = new THREE.Group();
+      routeGroup.visible = false;
+
+      ROUTES.forEach((path, idx) => {
+        const points = [];
+        path.forEach(id => {
+          const isl = ISLANDS.find(i => i.id === id);
+          if (isl) {
+            const alt = isl.altitude || 0;
+            points.push(latLonToVector3(isl.lat, isl.lon, PLANET_RADIUS * (1.01 + Math.abs(alt))));
+          }
+        });
+        if (points.length < 2) return;
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const geo = new THREE.TubeGeometry(curve, 64, 0.35, 6, false);
+        const mat = new THREE.MeshBasicMaterial({
+          color: idx === 0 ? 0x00d2d3 : 0xe17055,
+          transparent: true,
+          opacity: 0.7
+        });
+        routeGroup.add(new THREE.Mesh(geo, mat));
+      });
+      scene.add(routeGroup);
+    }
+
+    // ===================== UI & EVENTS =====================
+    function setupUI() {
+      document.getElementById('ly-redline').addEventListener('change', e => { redLine.visible = e.target.checked; });
+      document.getElementById('ly-grandline').addEventListener('change', e => { grandLine.visible = e.target.checked; });
+      document.getElementById('ly-calmbelt').addEventListener('change', e => {
+        calmBelts.forEach(c => c.visible = e.target.checked);
+      });
+      document.getElementById('ly-islands').addEventListener('change', e => { islandGroup.visible = e.target.checked; });
+      document.getElementById('ly-labels').addEventListener('change', e => { labelGroup.visible = e.target.checked; });
+      document.getElementById('ly-routes').addEventListener('change', e => { routeGroup.visible = e.target.checked; });
+      document.getElementById('ly-atmosphere').addEventListener('change', e => { atmosphere.visible = e.target.checked; });
+      document.getElementById('ly-strawhat').addEventListener('change', e => {
+        routeGroup.visible = e.target.checked;
+        document.getElementById('ly-routes').checked = e.target.checked;
+      });
+
+      document.getElementById('spoiler-level').addEventListener('change', e => {
+        spoilerLevel = parseInt(e.target.value);
+        updateIslandVisibility();
+      });
+      document.getElementById('arc-filter').addEventListener('change', e => {
+        arcFilter = e.target.value;
+        updateIslandVisibility();
+      });
+
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentMode = btn.dataset.mode;
+          applyMode();
+        });
+      });
+
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => flyToPreset(btn.dataset.view));
+      });
+
+      document.getElementById('close-info').addEventListener('click', () => {
+        document.getElementById('info-panel').classList.remove('visible');
+      });
+
+      const searchInput = document.getElementById('search-input');
+      const results = document.getElementById('search-results');
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (q.length < 1) { results.style.display = 'none'; return; }
+        const matches = ISLANDS.filter(i =>
+          i.name.toLowerCase().includes(q) || i.region.toLowerCase().includes(q)
+        ).filter(i => i.spoiler <= spoilerLevel).slice(0, 8);
+        results.innerHTML = matches.map(i => `
+          <div class="search-item" data-id="${i.id}">
+            <div class="name">${i.name}</div>
+            <div class="meta">${i.region} · ${i.arc}</div>
+          </div>
+        `).join('');
+        results.style.display = matches.length ? 'block' : 'none';
+        results.querySelectorAll('.search-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const isl = ISLANDS.find(x => x.id === el.dataset.id);
+            if (isl) { flyToIsland(isl); showInfo(isl); }
+            results.style.display = 'none';
+            searchInput.value = isl ? isl.name : '';
+          });
+        });
+      });
+    }
+
+    function updateIslandVisibility() {
+      islandGroup.children.forEach(marker => {
+        const d = marker.userData;
+        let show = d.spoiler <= spoilerLevel;
+        if (arcFilter !== 'all' && d.arc !== arcFilter && !d.arc.includes(arcFilter)) show = false;
+        marker.visible = show;
+      });
+      labelGroup.children.forEach(label => {
+        const d = label.userData;
+        let show = d.spoiler <= spoilerLevel;
+        if (arcFilter !== 'all' && d.arc !== arcFilter && !d.arc.includes(arcFilter)) show = false;
+        label.visible = show;
+      });
+    }
+
+    function applyMode() {
+      if (currentMode === 'night') {
+        renderer.toneMappingExposure = 0.55;
+        scene.fog.density = 0.002;
+      } else {
+        renderer.toneMappingExposure = 1.1;
+        scene.fog.density = 0.0012;
+      }
+      if (currentMode === 'navigation') {
+        grandLine.visible = true;
+        routeGroup.visible = true;
+        document.getElementById('ly-grandline').checked = true;
+        document.getElementById('ly-routes').checked = true;
+      }
+    }
+
+    function setupEvents() {
+      renderer.domElement.addEventListener('pointermove', onPointerMove);
+      renderer.domElement.addEventListener('click', onClick);
+    }
+
+    function onPointerMove(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(islandGroup.children, false);
+      const tooltip = document.getElementById('tooltip');
+      if (hits.length > 0) {
+        const isl = hits[0].object.userData;
+        if (isl.spoiler > spoilerLevel) return;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.clientX + 14) + 'px';
+        tooltip.style.top = (event.clientY + 14) + 'px';
+        tooltip.innerHTML = `<strong>${isl.name}</strong><br>${isl.region} · ${isl.arc}`;
+        document.body.style.cursor = 'pointer';
+      } else {
+        tooltip.style.display = 'none';
+        document.body.style.cursor = 'default';
+      }
+
+      document.getElementById('lat').textContent = (camera.position.y / PLANET_RADIUS * 40).toFixed(1);
+      document.getElementById('lon').textContent = ((Math.atan2(camera.position.x, camera.position.z) * 180 / Math.PI)).toFixed(1);
+    }
+
+    function onClick(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(islandGroup.children, false);
+      if (hits.length > 0) {
+        const isl = hits[0].object.userData;
+        if (isl.spoiler > spoilerLevel) return;
+        showInfo(isl);
+        selectedIsland = isl;
+      }
+    }
+
+    function showInfo(isl) {
+      document.getElementById('info-name').textContent = isl.name;
+      document.getElementById('info-region').textContent = isl.region;
+      document.getElementById('info-type').textContent = isl.type;
+      document.getElementById('info-climate').textContent = isl.climate;
+      document.getElementById('info-arc').textContent = isl.arc;
+      document.getElementById('info-accuracy').textContent = isl.accuracy === 'confirmed' ? 'Canon confirmed' : 'Approximate';
+      document.getElementById('info-desc').textContent = isl.desc;
+      document.getElementById('info-panel').classList.add('visible');
+
+      document.getElementById('btn-fly').onclick = () => flyToIsland(isl);
+      document.getElementById('btn-route').onclick = () => {
+        routeGroup.visible = true;
+        document.getElementById('ly-routes').checked = true;
+      };
+    }
+
+    function flyToIsland(isl) {
+      const alt = isl.altitude || 0;
+      const target = latLonToVector3(isl.lat, isl.lon, PLANET_RADIUS * (1.35 + Math.abs(alt)));
+      const start = camera.position.clone();
+      const duration = 1.4;
+      let t = 0;
+      autoRotate = false;
+      controls.autoRotate = false;
+
+      function step() {
+        t += 0.016;
+        const k = Math.min(t / duration, 1);
+        const ease = k * k * (3 - 2 * k);
+        camera.position.lerpVectors(start, target, ease);
+        controls.target.lerp(latLonToVector3(isl.lat, isl.lon, PLANET_RADIUS * (1 + alt)), ease);
+        controls.update();
+        if (k < 1) requestAnimationFrame(step);
+      }
+      step();
+    }
+
+    function flyToPreset(view) {
+      let pos, target = new THREE.Vector3(0,0,0);
+      const d = PLANET_RADIUS * 2.6;
+      switch(view) {
+        case 'home': pos = new THREE.Vector3(0, 60, d); break;
+        case 'north': pos = new THREE.Vector3(0, d, 20); break;
+        case 'south': pos = new THREE.Vector3(0, -d, 20); break;
+        case 'east': pos = new THREE.Vector3(d * 0.7, 30, d * 0.7); break;
+        case 'west': pos = new THREE.Vector3(-d * 0.7, 30, d * 0.7); break;
+        case 'grandline': pos = new THREE.Vector3(0, 20, d); break;
+        case 'newworld': pos = new THREE.Vector3(-d * 0.8, 40, -d * 0.5); break;
+        case 'redline': pos = new THREE.Vector3(d * 0.3, 0, d * 0.9); break;
+        default: pos = new THREE.Vector3(0, 60, d);
+      }
+      const start = camera.position.clone();
+      let t = 0;
+      autoRotate = false; controls.autoRotate = false;
+      function step() {
+        t += 0.018;
+        const k = Math.min(t / 1.2, 1);
+        const ease = k * k * (3 - 2 * k);
+        camera.position.lerpVectors(start, pos, ease);
+        controls.target.lerp(target, ease);
+        controls.update();
+        if (k < 1) requestAnimationFrame(step);
+      }
+      step();
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      if (ocean) ocean.rotation.y += 0.00015;
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
+    }
+
+    // Start
+    init().catch(err => {
+      console.error(err);
+      document.getElementById('load-status').textContent = 'Error loading. Check console.';
+    });
+  </script>
+</body>
+</html>
